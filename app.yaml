@@ -1,0 +1,9 @@
+command: ["streamlit", "run", "app.py", "--server.port", "8000", "--server.address", "0.0.0.0"]
+
+env:
+  - name: "CAMPUSOS_MOCK"
+    value: "false"
+  - name: "STREAMLIT_GATHER_USAGE_STATS"
+    value: "false"
+  # Set GENIE_SPACE_PLACEMENT and DATABRICKS_WAREHOUSE_ID here at hour 3,
+  # or configure them as app resources in the Databricks Apps UI.
