@@ -1,0 +1,15 @@
+{
+ "name": "campusos-game",
+ "version": "1.0.0",
+ "private": true,
+ "description": "CampusOS 3D Campus Game — HiggsField + Three.js",
+ "scripts": {
+ "dev": "npx serve .",
+ "start": "npx serve . -s",
+ "build": "echo 'Static build — just serve dist/'"
+ },
+ "dependencies": {
+ "express": "^4.18.0",
+ "cors": "^2.8.5"
+ }
+}
