@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>CampusOS</title>
+ <style>
+ * { margin: 0; padding: 0; box-sizing: border-box; }
+ body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+ #game-canvas { display: block; width: 100vw; height: 100vh; }
+
+ /* Loading Screen */
+ #loading {
+ position: fixed; inset: 0; z-index: 1000;
+ background: #080b10;
+ display: flex; flex-direction: column;
+ align-items: center; justify-content: center;
+ transition: opacity 0.8s;
+ }
+ #loading.hidden { opacity: 0; pointer-events: none; }
+ #loading h1 { color: #35e38a; font-size: 42px; margin-bottom: 8px; letter-spacing: 3px; }
+ #loading p { color: #666; font-size: 14px; margin-bottom: 30px; }
+ .loader-bar {
+ width: 200px; height: 4px; background: #1a1f25; border-radius: 2px; overflow: hidden;
+ }
+ .loader-fill {
+ width: 0%; height: 100%; background: #35e38a; border-radius: 2px;
+ animation: loadFill 2s ease-out forwards;
+ }
+ @keyframes loadFill { to { width: 100%; } }
+
+ /* Controls hint */
+ #controls-hint {
+ position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+ z-index: 50; color: #666; font-size: 13px;
+ background: rgba(5,8,12,.8); padding: 10px 20px; border-radius: 10px;
+ border: 1px solid #222; pointer-events: none;
+ transition: opacity 1s;
+ }
+
+ /* Zone popup */
+ .zone-popup {
+ position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+ z-index: 60; color: white; padding: 12px 28px; border-radius: 12px;
+ background: rgba(5,8,12,.9); border: 1px solid #35e38a;
+ font-size: 15px; pointer-events: none;
+ animation: popIn 0.4s ease-out, fadeOut 0.5s ease-in 2.5s forwards;
+ }
+ @keyframes popIn {
+ from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+ to { opacity: 1; transform: translateX(-50%) translateY(0); }
+ }
+ @keyframes fadeOut { to { opacity: 0; } }
+ </style>
+</head>
+<body>
+ <div id="loading">
+ <h1>CAMPUS OS</h1>
+ <p>Loading campus...</p>
+ <div class="loader-bar"><div class="loader-fill"></div></div>
+ </div>
+ <canvas id="game-canvas"></canvas>
+ <div id="controls-hint">WASD / Arrow Keys — Move &nbsp;|&nbsp; Walk into zones to open Genie</div>
+ <script type="importmap">
+ {
+ "imports": {
+ "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+ "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+ }
+ }
+ </script>
+ <script type="module" src="src/main.js"></script>
+</body>
+</html>
