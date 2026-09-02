@@ -1,0 +1,9 @@
+{
+  "name": "campusos-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CampusOS 3D walk-around campus (Three.js, zero build step)",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

@@ -1,0 +1,27 @@
+command: ["streamlit", "run", "app.py"]
+
+env:
+  - name: CAMPUSOS_MOCK
+    value: "false"
+  - name: CAMPUSOS_PLACEMENT_SPACE_ID
+    valueFrom: campusos-placement-space-id
+  - name: CAMPUSOS_LIBRARY_SPACE_ID
+    valueFrom: campusos-library-space-id
+  - name: CAMPUSOS_CANTEEN_SPACE_ID
+    valueFrom: campusos-canteen-space-id
+  - name: CAMPUSOS_RD_SPACE_ID
+    valueFrom: campusos-rd-space-id
+  - name: CAMPUSOS_WAREHOUSE_ID
+    valueFrom: campusos-warehouse-id
+  - name: DATABRICKS_HOST
+    valueFrom: campusos-databricks-host
+
+# Notes for P1 at deploy time (Hour 6.5):
+# 1. `databricks apps create campusos` (or reuse existing app)
+# 2. Create each `valueFrom` secret via:
+#      databricks secrets put-secret campusos <key-name>
+# 3. `databricks sync . /Workspace/Users/<you>/campusos`
+# 4. `databricks apps deploy campusos --source-code-path /Workspace/Users/<you>/campusos`
+# 5. Flip CAMPUSOS_MOCK to "false" only after P2's space IDs + warehouse ID
+#    are confirmed live (Hour 4.5 gate) — until then, leave mock mode "true"
+#    so the app always demos even if Databricks wiring isn't finished.

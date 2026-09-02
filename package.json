@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "playwright": "^1.62.1",
+    "streamlit": "^2.51.2"
+  }
+}
