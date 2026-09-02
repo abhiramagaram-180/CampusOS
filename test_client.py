@@ -19,11 +19,11 @@ from config import MOCK_MODE, ZONE_SPACE_IDS
 from genie_client import ask_genie
 
 QUESTIONS = [
-    "Which companies made the most offers last year?",
-    "What is the average package for CSE?",
+    "How many students are in the batch?",
+    "Which companies conducted interviews but did not extend any offers?",
 ]
 
-FOLLOW_UP = "Now break that down by branch"
+FOLLOW_UP = "Break that down by branch"
 
 
 def show(label, ans):
