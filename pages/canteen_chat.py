@@ -106,48 +106,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col1, col2 = st.columns([5, 1])
-
-with col1:
-    user_input = st.text_input(
-        "Ask the Canteen Genie...",
-        key="canteen_input",
-        label_visibility="collapsed",
-        placeholder="e.g., 'Is there anything vegan today?'",
-    )
-
-with col2:
-    send_clicked = st.button("➤", key="canteen_send", type="primary")
+# clear_on_submit empties the field after each send, so a rerun can't
+# re-fire the same message (that was the infinite-append bug).
+with st.form("canteen_chat_form", clear_on_submit=True):
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input(
+            "Ask the Canteen Genie...",
+            key="canteen_input",
+            label_visibility="collapsed",
+            placeholder="e.g., 'Is there anything vegan today?'",
+        )
+    with col2:
+        send_clicked = st.form_submit_button("➤", type="primary")
 
 st.markdown("<div style='display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0;'>", unsafe_allow_html=True)
 
 c1, c2, c3, c4 = st.columns(4)
 
+quick = None
 with c1:
     if st.button("📋 Today's menu", key="cq1"):
-        user_input = "What's on the menu today?"
+        quick = "What's on the menu today?"
 
 with c2:
     if st.button("⏰ Timings", key="cq2"):
-        user_input = "What are the canteen timings?"
+        quick = "What are the canteen timings?"
 
 with c3:
     if st.button("🥗 Veg options", key="cq3"):
-        user_input = "Are there vegan options?"
+        quick = "Are there vegan options?"
 
 with c4:
     if st.button("📊 Nutrition info", key="cq4"):
-        user_input = "Can I see nutritional information?"
+        quick = "Can I see nutritional information?"
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-if (send_clicked or user_input) and user_input.strip():
-    question = user_input.strip()
+pending = quick or (user_input.strip() if send_clicked and user_input.strip() else None)
 
+if pending:
     st.session_state.canteen_messages.append(
         {
             "role": "user",
-            "content": question,
+            "content": pending,
             "time": datetime.now().strftime("%I:%M %p"),
         }
     )

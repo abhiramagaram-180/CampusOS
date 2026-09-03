@@ -12,6 +12,51 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import MOCK_MODE, ZONE_SPACE_IDS, WAREHOUSE_ID
 from genie_client import ask_genie
+import placement_store
+
+# Question intents we can answer locally from submitted records, so a freshly
+# entered placement (e.g. a record-high CTC) shows up in the chat answers.
+_HIGHEST_HINTS = ("highest", "top ", "max", "maximum", "biggest", "largest", "best package")
+_PACKAGE_WORDS = ("package", "ctc", "salary", "pay", "compensation", "offer")
+
+
+def _apply_local_knowledge(question: str, answer):
+    """Fold submitted placement records into an analytics answer (demo).
+
+    Only touches the answer when the question is clearly about the highest
+    package; otherwise it just notes that submitted records exist.
+    """
+    submitted = placement_store.get_submitted()
+    if not submitted:
+        return answer
+
+    q = (question or "").lower()
+    if any(h in q for h in _HIGHEST_HINTS) and any(w in q for w in _PACKAGE_WORDS):
+        top = placement_store.highest_package()
+        if top:
+            company, lpa = top
+            # One row per offer, ranked. The `placement` column is a unique
+            # label ("1. Foo", "2. Foo", ...) so the bar chart shows every
+            # offer instead of summing two rows that share a company name.
+            lb = placement_store.leaderboard_df().head(placement_store.MAX_LEADERBOARD_ROWS)
+            answer.error = None
+            answer.text = (
+                f"The highest package on record is ₹{lpa:g} LPA at {company}, "
+                f"counting {len(submitted)} record(s) submitted through the form."
+            )
+            answer.df = lb[["placement", "package_ctc_lpa"]].reset_index(drop=True)
+            answer.sql = (
+                "SELECT company_name, package_ctc_lpa\n"
+                "FROM workspace.default.students\n"
+                "ORDER BY package_ctc_lpa DESC\n"
+                f"LIMIT {placement_store.MAX_LEADERBOARD_ROWS}"
+            )
+        return answer
+
+    answer.text = (answer.text or "") + (
+        f"\n\n_({len(submitted)} recently submitted placement record(s) also on file.)_"
+    )
+    return answer
 
 # ============================================================
 # PAGE CONFIG
@@ -157,7 +202,7 @@ if mode == "💬 Chat with Genie":
         if cols[i].button(q, key=f"suggest_{i}", use_container_width=True):
             st.session_state.placement_messages.append({"role": "user", "content": q})
             with st.spinner("Thinking..."):
-                answer = ask_genie("placement", q, st.session_state.placement_conv_id)
+                answer = _apply_local_knowledge(q, ask_genie("placement", q, st.session_state.placement_conv_id))
             st.session_state.placement_messages.append({"role": "assistant", "answer": answer})
             if answer.conversation_id:
                 st.session_state.placement_conv_id = answer.conversation_id
@@ -194,7 +239,7 @@ if mode == "💬 Chat with Genie":
     if prompt := st.chat_input("Ask about placements..."):
         st.session_state.placement_messages.append({"role": "user", "content": prompt})
         with st.spinner("Thinking..."):
-            answer = ask_genie("placement", prompt, st.session_state.placement_conv_id)
+            answer = _apply_local_knowledge(prompt, ask_genie("placement", prompt, st.session_state.placement_conv_id))
         st.session_state.placement_messages.append({"role": "assistant", "answer": answer})
         if answer.conversation_id:
             st.session_state.placement_conv_id = answer.conversation_id
@@ -244,40 +289,60 @@ elif mode == "📝 Submit Placement":
             if not all([student_id, student_name, company_name]):
                 st.error("⚠️ Please fill in all required fields (marked with *)")
             else:
+                record = {
+                    "student_id": student_id,
+                    "name": student_name,
+                    "branch": branch,
+                    "batch_year": int(batch_year),
+                    "cgpa": float(cgpa),
+                    "company_name": company_name,
+                    "package_ctc_lpa": float(package_ctc),
+                    "role_type": role_type,
+                    "offer_status": offer_status,
+                    "tier": int(tier),
+                }
+                placement_store.add_placement(record)
 
-                # Build INSERT SQL
                 insert_sql = f"""INSERT INTO workspace.default.students
     (student_id, name, branch, batch_year, cgpa, company_name, package_ctc_lpa, role_type, offer_status, tier)
 VALUES
-    ('{student_id}', '{student_name}', '{branch}', {batch_year}, {cgpa}, '{company_name}', {package_ctc}, '{role_type}', '{offer_status}', {tier})"""
+    ('{student_id}', '{student_name}', '{branch}', {int(batch_year)}, {cgpa}, '{company_name}', {package_ctc}, '{role_type}', '{offer_status}', {int(tier)})"""
+
+                st.markdown(
+                    f"""
+                    <div class="success-box">
+                        ✅ <strong>Placement record saved.</strong><br>
+                        {student_name} ({student_id}) — {branch} {int(batch_year)} batch<br>
+                        {company_name} — ₹{package_ctc:g} LPA ({role_type}, {offer_status})
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                top = placement_store.highest_package()
+                if top and top[0] == company_name and abs(top[1] - float(package_ctc)) < 1e-9:
+                    st.success(f"🏆 ₹{float(package_ctc):g} LPA is now the highest package on record — ask the Genie about it.")
+
+                st.code(insert_sql, language="sql")
 
                 if MOCK_MODE:
-                    st.markdown(
-                        f"""
-                        <div class="success-box">
-                            ✅ <strong>Mock Mode — Record would be inserted:</strong><br>
-                            {student_name} ({student_id}) from {branch} {batch_year} batch<br>
-                            Placed at <strong>{company_name}</strong> — ₹{package_ctc} LPA ({role_type})
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    st.code(insert_sql, language="sql")
-                    st.info("💡 Flip `MOCK_MODE = False` in `config.py` to write to real Databricks.")
+                    st.info("Mock mode: saved to the local demo store. Switch to 💬 Chat with Genie and ask about the highest package.")
                 else:
                     try:
-                        from genie_client import execute_sql
-                        result = execute_sql(insert_sql, WAREHOUSE_ID)
-                        st.markdown(
-                            f"""
-                            <div class="success-box">
-                                ✅ <strong>Record inserted successfully!</strong><br>
-                                {student_name} — {company_name} — ₹{package_ctc} LPA
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        from genie_client import execute_sql  # optional live-mode helper
+                        execute_sql(insert_sql, WAREHOUSE_ID)
+                        st.caption("Also written to Databricks.")
                     except Exception as e:
-                        st.error(f"❌ Failed to insert: {e}")
+                        st.warning(f"Saved to the local store. Databricks write skipped: {e}")
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Everything on record so far — nothing you submit ever drops off this list.
+    board = placement_store.leaderboard_df()
+    submitted_n = int((board["source"] == "submitted").sum())
+    st.markdown(f"#### 📊 Placements on record  ·  {submitted_n} submitted")
+    st.dataframe(
+        board[["rank", "company_name", "package_ctc_lpa", "source"]],
+        use_container_width=True,
+        hide_index=True,
+    )

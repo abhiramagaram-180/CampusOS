@@ -114,7 +114,7 @@ for i, q in enumerate(suggestions):
             st.session_state.library_messages.append({"role": "user", "content": q})
             with st.spinner("Thinking..."):
                 answer = ask_genie("library", q, st.session_state.library_conv_id)
-            st.session_state.library_messages.append({"role": "assistant", "content": answer})
+            st.session_state.library_messages.append({"role": "assistant", "answer": answer})
             if answer.conversation_id:
                 st.session_state.library_conv_id = answer.conversation_id
             st.rerun()
@@ -125,17 +125,23 @@ st.markdown("<br>", unsafe_allow_html=True)
 # CHAT HISTORY
 # ============================================================
 
-for msg in st.session_state.library_messages:
-    with st.chat_message(msg["role"]):
-        answer = msg["content"]
-        st.markdown(answer.text or answer.error or "No response.")
-        if answer.df is not None and not answer.df.empty:
-            st.dataframe(answer.df, use_container_width=True)
-        if answer.sql:
-            with st.expander("Show the SQL Genie ran"):
-                st.code(answer.sql, language="sql")
-        if answer.error:
-            st.error(answer.error)
+# User turns are plain strings, assistant turns are GenieAnswer objects,
+# so branch on the explicit role instead of assuming every entry has .text
+for m in st.session_state.library_messages:
+    with st.chat_message(m["role"]):
+        if m["role"] == "user":
+            st.markdown(m["content"])
+        else:
+            a = m["answer"]
+            if a.error:
+                st.error(a.error)
+            else:
+                st.markdown(a.text)
+                if a.df is not None and not a.df.empty:
+                    st.dataframe(a.df, use_container_width=True)
+                if a.sql:
+                    with st.expander("Show the SQL Genie ran"):
+                        st.code(a.sql, language="sql")
 
 # ============================================================
 # CHAT INPUT
@@ -143,24 +149,9 @@ for msg in st.session_state.library_messages:
 
 if prompt := st.chat_input("Ask the Library Genie..."):
     st.session_state.library_messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            answer = ask_genie("library", prompt, st.session_state.library_conv_id)
-
-        st.session_state.library_messages.append({"role": "assistant", "content": answer})
-        if answer.conversation_id:
-            st.session_state.library_conv_id = answer.conversation_id
-
-        st.markdown(answer.text or answer.error or "No response.")
-        if answer.df is not None and not answer.df.empty:
-            st.dataframe(answer.df, use_container_width=True)
-        if answer.sql:
-            with st.expander("Show the SQL Genie ran"):
-                st.code(answer.sql, language="sql")
-        if answer.error:
-            st.error(answer.error)
-
+    with st.spinner("Thinking..."):
+        answer = ask_genie("library", prompt, st.session_state.library_conv_id)
+    st.session_state.library_messages.append({"role": "assistant", "answer": answer})
+    if answer.conversation_id:
+        st.session_state.library_conv_id = answer.conversation_id
     st.rerun()

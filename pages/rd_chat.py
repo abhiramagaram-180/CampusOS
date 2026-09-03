@@ -3,6 +3,7 @@ R&D Lab Zone Chat — AI assistant for the campus R&D department.
 Ask about projects, publications, lab equipment, research, etc.
 """
 
+import re
 from datetime import datetime
 
 import streamlit as st
@@ -106,48 +107,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col1, col2 = st.columns([5, 1])
-
-with col1:
-    user_input = st.text_input(
-        "Ask the R&D Genie...",
-        key="rd_input",
-        label_visibility="collapsed",
-        placeholder="e.g., 'What projects are currently active?'",
-    )
-
-with col2:
-    send_clicked = st.button("➤", key="rd_send", type="primary")
+# clear_on_submit empties the field after each send, so a rerun can't
+# re-fire the same message (that was the infinite-append bug).
+with st.form("rd_chat_form", clear_on_submit=True):
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input(
+            "Ask the R&D Genie...",
+            key="rd_input",
+            label_visibility="collapsed",
+            placeholder="e.g., 'What projects are currently active?'",
+        )
+    with col2:
+        send_clicked = st.form_submit_button("➤", type="primary")
 
 st.markdown("<div style='display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0;'>", unsafe_allow_html=True)
 
 r1, r2, r3, r4 = st.columns(4)
 
+quick = None
 with r1:
     if st.button("🔬 Active projects", key="rq1"):
-        user_input = "What projects are currently active?"
+        quick = "What projects are currently active?"
 
 with r2:
     if st.button("📑 Publications", key="rq2"):
-        user_input = "Show me recent publications"
+        quick = "Show me recent publications"
 
 with r3:
     if st.button("🔧 Lab equipment", key="rq3"):
-        user_input = "What lab equipment can I use?"
+        quick = "What lab equipment can I use?"
 
 with r4:
     if st.button("💼 Research jobs", key="rq4"):
-        user_input = "Are there research assistant positions?"
+        quick = "Are there research assistant positions?"
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-if (send_clicked or user_input) and user_input.strip():
-    question = user_input.strip()
+pending = quick or (user_input.strip() if send_clicked and user_input.strip() else None)
 
+if pending:
     st.session_state.rd_messages.append(
         {
             "role": "user",
-            "content": question,
+            "content": pending,
             "time": datetime.now().strftime("%I:%M %p"),
         }
     )
@@ -166,14 +169,74 @@ elif st.session_state.rd_typing:
         "publish": "📑 <strong>Recent Publications (5 this semester):</strong><br>• 'Campus Navigation with Deep RL' — IEEE Conf. on AI<br>• 'IoT Energy Optimization' — ACM Computing Surveys<br>• 'Verifiable Credentials on Blockchain' — Springer Blockchain Journal<br>• 'Student Analytics Dashboard' — IEEE Access<br>• 'Smart Room Booking System' — ACM UbiComp<br><br>I can send you the PDF links.",
         "equip": "🔧 <strong>Lab Equipment Available:</strong><br><br>• Oscilloscopes (×8) — Book in 2-hr slots<br>• 3D Printers (×3) — Overnight prints available<br>• VR Headsets (×6) — For AI/VR projects<br>• Drone testing platform — Needs safety clearance<br>• Soldering stations (×4) — First come first served<br><br>Want me to book something?",
         "job": "💼 <strong>Open Research Positions:</strong><br><br>1. <strong>RA — AI Navigation Project</strong> (2 openings, CS/ECE)<br>2. <strong>RA — IoT Lab</strong> (1 opening, ECE)<br>3. <strong>Summer Intern — Blockchain</strong> (1 opening, CSE)<br><br>Stipend: ₹15K–25K/month. Apply through the R&D portal.",
-        "default": f"🔬 Interesting! I can help with projects, publications, equipment booking, and research positions. You asked: \"{last_msg['content']}\" — Let me look into that!",
+        "default": f"🔬 Interesting! I can help with projects, publications, equipment booking, mentors, and research positions. You asked: \"{last_msg['content']}\" — Let me look into that!",
     }
 
-    response = responses["default"]
-    for key, val in responses.items():
-        if key != "default" and key in question:
-            response = val
-            break
+    # Faculty roster — used to answer "who should mentor me for X" questions.
+    faculty = [
+        {
+            "name": "Dr. Meera Krishnan", "title": "Associate Professor, CSE",
+            "area": "Machine Learning & Deep Learning",
+            "project": "AI-Powered Campus Navigation (Deep RL)",
+            "slot": "Tue/Thu 3–5 PM · Cabin CS-214",
+            "keywords": ("ml", "machine learning", "deep learning", "ai", "neural",
+                         "nlp", "llm", "language model", "reinforcement", "data science", "model"),
+        },
+        {
+            "name": "Dr. Arvind Rao", "title": "Professor, ECE",
+            "area": "IoT, Embedded Systems & Edge Computing",
+            "project": "Smart Campus IoT sensor network",
+            "slot": "Mon/Wed 11 AM–1 PM · Lab EC-Block 2",
+            "keywords": ("iot", "embedded", "sensor", "edge", "hardware", "firmware",
+                         "signal", "robotics", "drone"),
+        },
+        {
+            "name": "Dr. Neha Sethi", "title": "Assistant Professor, CSE",
+            "area": "Blockchain, Cryptography & Security",
+            "project": "Blockchain Academic Certificates",
+            "slot": "Fri 2–4 PM · Cabin CS-108",
+            "keywords": ("blockchain", "crypto", "security", "ledger", "ethereum",
+                         "smart contract", "web3", "privacy"),
+        },
+        {
+            "name": "Dr. Sameer Joshi", "title": "Professor & R&D Coordinator",
+            "area": "Computer Vision & Applied AI",
+            "project": "Sensor-fusion perception for campus navigation",
+            "slot": "Wed 4–6 PM · Cabin CS-301",
+            "keywords": ("vision", "cv", "image", "detection", "segmentation",
+                         "ar", "vr", "graphics", "perception"),
+        },
+    ]
+    mentor_hints = ("mentor", "prof", "professor", "guide", "advisor", "adviser",
+                    "supervisor", "faculty", "who should i", "whom should i",
+                    "who can i work with", "reach out to", "work under")
+
+    response = None
+    if any(h in question for h in mentor_hints):
+        # Whole-word match so short keywords like "ai"/"ml" don't fire on
+        # substrings (e.g. "ai" inside "blockchain").
+        def _hits(kws):
+            return sum(1 for k in kws if re.search(r"\b" + re.escape(k) + r"\b", question))
+
+        best, score = faculty[0], 0
+        for f in faculty:
+            hits = _hits(f["keywords"])
+            if hits > score:
+                best, score = f, hits
+        response = (
+            f"👩‍🏫 <strong>Best mentor match: {best['name']}</strong> — {best['title']}<br>"
+            f"<strong>Area:</strong> {best['area']}<br>"
+            f"<strong>Leads:</strong> {best['project']}<br>"
+            f"<strong>Office hours:</strong> {best['slot']}<br><br>"
+            "Drop by during office hours, or send a short note on the R&D portal about what you want to build."
+        )
+
+    if response is None:
+        response = responses["default"]
+        for key, val in responses.items():
+            if key != "default" and key in question:
+                response = val
+                break
 
     st.session_state.rd_messages.append(
         {
